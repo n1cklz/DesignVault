@@ -243,6 +243,9 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* let workspace grow and allow children to manage overflow */
+  flex: 1;
+  min-height: 0;
 }
 
 .workspace-header {
@@ -271,8 +274,43 @@ textarea::placeholder {
   gap: 1px;
   grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
   overflow: auto;
+  /* allow the grid to fill available vertical space so scrollbar appears reliably */
+  flex: 1;
+  min-height: 0;
   padding: 1px;
 }
+
+/* Multi-select checkbox inside image card */
+.image-card .multi-select {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+}
+
+/* Preview navigation buttons */
+.preview-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #ffffff;
+  border: 1px solid #0a0a0a;
+  border-radius: 4px;
+  height: 42px;
+  width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  cursor: pointer;
+}
+.preview-nav.prev { left: 24px; }
+.preview-nav.next { right: 24px; }
+
+/* Make image-card a positioned container to hold the checkbox */
+.image-card { position: relative; }
 
 .image-card {
   background: #ffffff;

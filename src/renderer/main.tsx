@@ -7,6 +7,8 @@ import {
   Trash2,
   Upload,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { ImageItem, Tag, VaultSummary } from "../shared/types";
 import { createBrowserPreviewApi } from "./browserPreviewApi";
@@ -26,6 +28,7 @@ function App() {
   const [notice, setNotice] = useState<Notice>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<ImageItem | null>(null);
+  const [multiSelectIds, setMultiSelectIds] = useState<number[]>([]);
 
   useEffect(() => {
     void refresh();
@@ -93,11 +96,21 @@ function App() {
     }
   }
 
-  async function addTag(event: FormEvent) {
-    event.preventDefault();
-    if (!selectedImage || !tagInput.trim()) return;
-    syncSummary(await designVault.addTag(selectedImage.id, tagInput));
-    setTagInput("");
+  async function addTag(event?: FormEvent) {
+    event?.preventDefault();
+    if (!selectedImage) return;
+    const name = tagInput.trim();
+    if (!name) return;
+    if ((selectedImage.tags?.length ?? 0) >= 10) {
+      setNotice({ kind: "error", text: "Maximum of 10 tags per image." });
+      return;
+    }
+    try {
+      syncSummary(await designVault.addTag(selectedImage.id, name));
+      setTagInput("");
+    } catch (err) {
+      setNotice({ kind: "error", text: `Failed to add tag: ${String(err)}` });
+    }
   }
 
   async function removeTag(tagId: number) {
@@ -118,6 +131,44 @@ function App() {
     syncSummary(await designVault.removeImage(selectedImage.id));
     setPreview(null);
     setNotice({ kind: "info", text: "Image removed." });
+  }
+
+  function toggleMultiSelect(imageId: number) {
+    setMultiSelectIds((current) => (current.includes(imageId) ? current.filter((id) => id !== imageId) : [...current, imageId]));
+  }
+
+  async function removeSelectedImages() {
+    if (multiSelectIds.length === 0) return;
+    const confirmed = window.confirm(`Remove ${multiSelectIds.length} selected image(s)?`);
+    if (!confirmed) return;
+    for (const id of multiSelectIds) {
+      // sequential removal for simplicity
+      // underlying API may dedupe or cascade
+      // ignore individual errors and continue
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await designVault.removeImage(id);
+      } catch (err) {
+        console.error("Failed to remove image", id, err);
+      }
+    }
+    await refresh();
+    setMultiSelectIds([]);
+    setPreview(null);
+    setNotice({ kind: "info", text: "Selected images removed." });
+  }
+
+  function navigatePreview(direction: "previous" | "next") {
+    if (!preview && selectedImage == null) return;
+    const currentId = preview?.id ?? selectedImage?.id ?? null;
+    if (currentId == null) return;
+    const idx = filteredImages.findIndex((img) => img.id === currentId);
+    if (idx === -1) return;
+    const nextIdx = direction === "next" ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= filteredImages.length) return;
+    const nextImage = filteredImages[nextIdx];
+    setPreview(nextImage);
+    setSelectedId(nextImage.id);
   }
 
   function toggleTag(tagId: number) {
@@ -196,12 +247,19 @@ function App() {
             <div className="section-title">Archive</div>
             <p>{filteredImages.length === 1 ? "1 image" : `${filteredImages.length} images`}</p>
           </div>
-          {notice && (
-            <button className={`notice ${notice.kind}`} type="button" onClick={() => setNotice(null)}>
-              {notice.text}
-              <X size={14} />
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {multiSelectIds.length > 0 && (
+              <button className="danger-button" type="button" onClick={removeSelectedImages} style={{ width: "auto", height: 36 }}>
+                <Trash2 size={14} /> Remove {multiSelectIds.length}
+              </button>
+            )}
+            {notice && (
+              <button className={`notice ${notice.kind}`} type="button" onClick={() => setNotice(null)}>
+                {notice.text}
+                <X size={14} />
+              </button>
+            )}
+          </div>
         </header>
 
         {images.length === 0 ? (
@@ -222,6 +280,14 @@ function App() {
                 onClick={() => setSelectedId(image.id)}
                 onDoubleClick={() => setPreview(image)}
               >
+                <input
+                  className="multi-select"
+                  type="checkbox"
+                  checked={multiSelectIds.includes(image.id)}
+                  onChange={() => toggleMultiSelect(image.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Select image"
+                />
                 <span className="thumb">
                   <img src={image.imageUrl} alt={image.originalName} />
                 </span>
@@ -276,7 +342,12 @@ function App() {
                   onChange={(event) => setTagInput(event.target.value)}
                   placeholder="Add tag"
                 />
-                <button className="icon-button" type="submit" title="Add tag">
+                <button
+                  className="icon-button"
+                  type="submit"
+                  title="Add tag"
+                  disabled={!tagInput.trim() || (selectedImage.tags.length >= 10)}
+                >
                   <ImagePlus size={17} />
                 </button>
               </form>
@@ -316,6 +387,12 @@ function App() {
         <div className="preview-overlay" role="dialog" aria-modal="true">
           <button className="preview-close" type="button" onClick={() => setPreview(null)} title="Close preview">
             <X size={22} />
+          </button>
+          <button className="preview-nav prev" type="button" onClick={() => navigatePreview("previous")} title="Previous" disabled={filteredImages.findIndex(img => img.id === preview.id) <= 0}>
+            <ChevronLeft size={18} />
+          </button>
+          <button className="preview-nav next" type="button" onClick={() => navigatePreview("next")} title="Next" disabled={filteredImages.findIndex(img => img.id === preview.id) >= filteredImages.length - 1}>
+            <ChevronRight size={18} />
           </button>
           <img src={preview.imageUrl} alt={preview.originalName} />
           <div className="preview-caption">{preview.originalName}</div>
