@@ -1,0 +1,55 @@
+{
+  "name": "designvault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local desktop image vault for designers.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && tsc -p tsconfig.main.json && electron .",
+    "desktop": "npm run build && DESIGNVAULT_PROD=1 electron .",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "package:mac": "npm run build && electron-builder --mac dir --publish never",
+    "package:mac:packager": "npm run build && electron-packager . DesignVault --platform=darwin --arch=arm64 --out=outputs/packager --overwrite --prune=true --app-bundle-id=local.designvault.launcher --app-version=0.1.0 --app-category-type=public.app-category.photography --icon=outputs/DesignVault.app/Contents/Resources/DesignVault.icns",
+    "rebuild:sqlite": "npm rebuild better-sqlite3 --runtime=electron --target=39.2.4 --disturl=https://electronjs.org/headers",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "better-sqlite3": "^12.2.0",
+    "image-size": "^2.0.2",
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "concurrently": "^9.2.1",
+    "electron": "^39.2.4",
+    "electron-builder": "^24.0.0",
+    "electron-packager": "^17.1.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.1"
+  },
+  "build": {
+    "appId": "local.designvault.launcher",
+    "productName": "DesignVault",
+    "directories": {
+      "output": "outputs/builder"
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.photography"
+    },
+    "files": [
+      "dist/**/*"
+    ]
+  }
+}
