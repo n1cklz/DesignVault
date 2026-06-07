@@ -1,10 +1,35 @@
+@font-face {
+  font-family: "Host Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  src: local("Host Grotesk"), local("Host_Grotesk"), local("Host Grotesk Regular");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: local("Geist Mono"), local("Geist_Mono"), local("Geist Mono Regular"), local("Menlo");
+}
+
 :root {
   color: #0a0a0a;
   background: #ffffff;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Host Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   font-synthesis: none;
   text-rendering: geometricPrecision;
+}
+
+.geist-mono,
+.tag-filter,
+.tag-chip,
+.image-meta,
+.image-meta span,
+.inspector-section p,
+.workspace-header p,
+.preview-caption,
+.status-block span {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 * {
@@ -274,43 +299,10 @@ textarea::placeholder {
   gap: 1px;
   grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
   overflow: auto;
-  /* allow the grid to fill available vertical space so scrollbar appears reliably */
-  flex: 1;
+  max-height: calc(100vh - 124px);
   min-height: 0;
   padding: 1px;
 }
-
-/* Multi-select checkbox inside image card */
-.image-card .multi-select {
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  z-index: 2;
-  width: 18px;
-  height: 18px;
-}
-
-/* Preview navigation buttons */
-.preview-nav {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #ffffff;
-  border: 1px solid #0a0a0a;
-  border-radius: 4px;
-  height: 42px;
-  width: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-  cursor: pointer;
-}
-.preview-nav.prev { left: 24px; }
-.preview-nav.next { right: 24px; }
-
-/* Make image-card a positioned container to hold the checkbox */
-.image-card { position: relative; }
 
 .image-card {
   background: #ffffff;
@@ -321,22 +313,82 @@ textarea::placeholder {
   gap: 0;
   min-height: 224px;
   padding: 0;
+  position: relative;
   text-align: left;
 }
 
 .image-card.active {
-  outline: 3px solid #0a0a0a;
-  outline-offset: -3px;
+  border: 2px solid #0a0a0a;
+  box-shadow: 0 0 0 2px rgba(10,10,10,0.02) inset;
 }
 
-.thumb {
-  align-items: center;
-  aspect-ratio: 1 / 1;
-  background: #f2f2f2;
+.selection-indicator {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid #0a0a0a;
+  z-index: 2;
+}
+
+.selection-indicator.unselected {
+  background: #ffffff;
+  border-color: #a0a0a0;
+}
+
+.selection-indicator.selected {
+  background: #ff8a00;
+  border-color: #ff8a00;
+}
+
+.card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: flex;
+  gap: 6px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.card-action-button {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(10,10,10,0.12);
+  height: 28px;
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  min-height: 0;
-  overflow: hidden;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease, box-shadow 120ms ease;
+}
+
+.image-card:hover .card-actions,
+.image-card:focus-within .card-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.card-action-button:hover {
+  transform: translateY(-1px);
+  background: #ffffff;
+}
+
+.card-action-button:active {
+  transform: translateY(0);
+}
+
+.card-action-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(10,10,10,0.06);
 }
 
 .thumb img,
@@ -434,42 +486,63 @@ textarea {
   z-index: 20;
 }
 
-.preview-overlay img {
-  border: 1px solid #0a0a0a;
-  max-height: calc(100vh - 140px);
-  max-width: calc(100vw - 140px);
-  object-fit: contain;
-}
-
-.preview-close {
+.preview-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  padding: 8px 18px;
+  display: inline-flex;
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #0a0a0a;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  height: 42px;
   justify-content: center;
-  position: fixed;
-  right: 24px;
-  top: 24px;
-  width: 42px;
+  cursor: pointer;
+  opacity: 0.28;
+  transition: opacity 140ms ease, transform 120ms ease;
+  z-index: 30;
 }
 
-.preview-caption {
-  background: #ffffff;
-  border: 1px solid #0a0a0a;
-  bottom: 24px;
-  font-size: 12px;
-  left: 50%;
-  max-width: calc(100vw - 48px);
-  overflow: hidden;
-  padding: 8px 12px;
-  position: fixed;
-  text-overflow: ellipsis;
-  transform: translateX(-50%);
-  white-space: nowrap;
+.preview-arrow:hover {
+  opacity: 0.8;
 }
+
+.preview-arrow img {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.preview-left {
+  left: 12px;
+}
+
+.preview-right {
+  right: 12px;
+}
+
+ .preview-overlay img {
+   border: 1px solid #0a0a0a;
+   max-height: calc(100vh - 140px);
+   max-width: calc(100vw - 140px);
+   object-fit: contain;
+   position: relative;
+   z-index: 2;
+ }
+
+ .preview-caption {
+   background: #ffffff;
+   border: 1px solid #0a0a0a;
+   bottom: 24px;
+   font-size: 12px;
+   left: 50%;
+   max-width: calc(100vw - 48px);
+   overflow: hidden;
+   padding: 8px 12px;
+   position: fixed;
+   text-overflow: ellipsis;
+   transform: translateX(-50%);
+   white-space: nowrap;
+ }
 
 @media (max-width: 1060px) {
   .app-shell {

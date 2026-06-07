@@ -160,18 +160,53 @@ export class VaultDatabase {
     const name = rawName.trim().replace(/\s+/g, " ");
     if (!name) return this.listImages();
 
+    const imageExists = this.db.prepare("select 1 from images where id = ?").get(imageId);
+    if (!imageExists) return this.listImages();
+
     const now = new Date().toISOString();
-    const tagResult = this.db
-      .prepare("insert into tags (name, created_at) values (?, ?) on conflict(name) do update set name = excluded.name")
-      .run(name, now);
 
-    const tag =
-      tagResult.lastInsertRowid && Number(tagResult.lastInsertRowid) > 0
-        ? Number(tagResult.lastInsertRowid)
-        : (this.db.prepare("select id from tags where name = ?").get(name) as { id: number }).id;
+    const insertTx = this.db.transaction(() => {
+      // try to find tag case-insensitively first
+      let tagRow = this.db.prepare("select id from tags where lower(name) = lower(?)").get(name) as { id: number } | undefined;
+      if (!tagRow) {
+        // insert tag; allow unique constraint to control duplicates
+        const res = this.db.prepare("insert into tags (name, created_at) values (?, ?)").run(name, now);
+        const newId = Number(res.lastInsertRowid);
+        if (newId > 0) {
+          tagRow = { id: newId };
+        }
+      }
 
-    this.db.prepare("insert or ignore into image_tags (image_id, tag_id) values (?, ?)").run(imageId, tag);
-    this.touchImage(imageId);
+      if (!tagRow) {
+        // as a last resort try to select again (race-safe)
+        tagRow = this.db.prepare("select id from tags where lower(name) = lower(?)").get(name) as { id: number } | undefined;
+      }
+
+      if (!tagRow) {
+        throw new Error(`Unable to resolve tag id for ${name}`);
+      }
+
+      const tagId = tagRow.id;
+
+      const info = this.db.prepare("insert or ignore into image_tags (image_id, tag_id) values (?, ?)").run(imageId, tagId);
+      if (!info || typeof info.changes === "undefined") {
+        // shouldn't happen, but log for diagnostics
+        // eslint-disable-next-line no-console
+        console.warn("image_tags insert returned unexpected info", { imageId, tagId, info });
+      }
+
+      this.touchImage(imageId);
+    });
+
+    try {
+      insertTx();
+    } catch (err) {
+      // log context and rethrow so caller sees meaningful info
+      // eslint-disable-next-line no-console
+      console.error("VaultDatabase.addTag failed", { imageId, name, err });
+      throw err;
+    }
+
     return this.listImages();
   }
 

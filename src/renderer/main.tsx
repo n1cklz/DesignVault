@@ -9,7 +9,10 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Check,
 } from "lucide-react";
+import leftArrowUrl from "./assets/arrow-left.svg";
+import rightArrowUrl from "./assets/arrow-right.svg";
 import type { ImageItem, Tag, VaultSummary } from "../shared/types";
 import { createBrowserPreviewApi } from "./browserPreviewApi";
 import "./styles.css";
@@ -24,6 +27,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<number[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [isAddingTag, setIsAddingTag] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -99,17 +103,56 @@ function App() {
   async function addTag(event?: FormEvent) {
     event?.preventDefault();
     if (!selectedImage) return;
-    const name = tagInput.trim();
-    if (!name) return;
-    if ((selectedImage.tags?.length ?? 0) >= 10) {
+
+    const rawValue = tagInput.trim();
+    if (!rawValue) return;
+
+    const existingTagNames = selectedImage.tags.map((tag) => tag.name.toLowerCase());
+    const tagsToAdd = rawValue
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .reduce<string[]>((acc, next) => {
+        if (acc.some((existing) => existing.toLowerCase() === next.toLowerCase())) {
+          return acc;
+        }
+        if (existingTagNames.includes(next.toLowerCase())) {
+          return acc;
+        }
+        return [...acc, next];
+      }, []);
+
+    if (tagsToAdd.length === 0) {
+      setTagInput("");
+      return;
+    }
+
+    if ((selectedImage.tags?.length ?? 0) + tagsToAdd.length > 10) {
       setNotice({ kind: "error", text: "Maximum of 10 tags per image." });
       return;
     }
+
+    const targetImageId = selectedImage.id; // capture id to avoid stale state
+    if (isAddingTag) return; // avoid duplicate submits
+    setIsAddingTag(true);
     try {
-      syncSummary(await designVault.addTag(selectedImage.id, name));
+      let summary: VaultSummary | null = null;
+      for (const nextTag of tagsToAdd) {
+        // preserve each comma-separated value as a separate tag
+        summary = await designVault.addTag(targetImageId, nextTag);
+      }
+      if (summary) {
+        syncSummary(summary);
+      }
       setTagInput("");
     } catch (err) {
-      setNotice({ kind: "error", text: `Failed to add tag: ${String(err)}` });
+      const msg = err instanceof Error ? err.message : String(err);
+      setNotice({ kind: "error", text: `Failed to add tag: ${msg}` });
+      // surface useful debug info to terminal
+      // eslint-disable-next-line no-console
+      console.error("addTag failed", { imageId: targetImageId, rawValue, err });
+    } finally {
+      setIsAddingTag(false);
     }
   }
 
@@ -158,6 +201,24 @@ function App() {
     setNotice({ kind: "info", text: "Selected images removed." });
   }
 
+  async function removeImageById(imageId: number) {
+    const image = images.find((i) => i.id === imageId);
+    if (!image) return;
+    const confirmed = window.confirm(`Remove "${image.originalName}" from DesignVault?`);
+    if (!confirmed) return;
+    try {
+      await designVault.removeImage(imageId);
+      await refresh();
+      setPreview(null);
+      setNotice({ kind: "info", text: "Image removed." });
+      // if this image was selected, clear selection
+      if (selectedId === imageId) setSelectedId(null);
+    } catch (err) {
+      console.error("Failed to remove image by id", imageId, err);
+      setNotice({ kind: "error", text: `Failed to remove image: ${String(err)}` });
+    }
+  }
+
   function navigatePreview(direction: "previous" | "next") {
     if (!preview && selectedImage == null) return;
     const currentId = preview?.id ?? selectedImage?.id ?? null;
@@ -197,7 +258,6 @@ function App() {
       <aside className="sidebar">
         <div>
           <h1>DESIGNVAULT</h1>
-          <p className="small-copy">Your images. Your ideas. Your vault.</p>
         </div>
 
         <button className="primary-button" type="button" onClick={chooseImages}>
@@ -272,31 +332,79 @@ function App() {
           </div>
         ) : (
           <div className="image-grid">
-            {filteredImages.map((image) => (
-              <button
-                className={image.id === selectedId ? "image-card active" : "image-card"}
-                key={image.id}
-                type="button"
-                onClick={() => setSelectedId(image.id)}
-                onDoubleClick={() => setPreview(image)}
-              >
-                <input
-                  className="multi-select"
-                  type="checkbox"
-                  checked={multiSelectIds.includes(image.id)}
-                  onChange={() => toggleMultiSelect(image.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  title="Select image"
-                />
-                <span className="thumb">
-                  <img src={image.imageUrl} alt={image.originalName} />
-                </span>
-                <span className="image-meta">
-                  <strong>{image.originalName}</strong>
-                  <span>{image.width && image.height ? `${image.width} x ${image.height}` : "Dimensions unknown"}</span>
-                </span>
-              </button>
-            ))}
+            {filteredImages.map((image) => {
+                          const isSelected = image.id === selectedId;
+                          const isMultiSelected = multiSelectIds.includes(image.id);
+                          // show the dot only when multi-select mode is active or the item is part of multi selection
+                          const showIndicator = multiSelectIds.length > 0 || isMultiSelected;
+                          const indicatorState = isMultiSelected ? "selected" : "unselected";
+
+              return (
+                <button
+                  className={image.id === selectedId ? "image-card active" : "image-card"}
+                  key={image.id}
+                  type="button"
+                  onClick={() => setSelectedId(image.id)}
+                  onDoubleClick={() => setPreview(image)}
+                >
+                  {showIndicator && (
+                    <span
+                      className={`selection-indicator ${indicatorState}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleMultiSelect(image.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          toggleMultiSelect(image.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={isMultiSelected ? "Remove from selection" : "Add to selection"}
+                    />
+                  )}
+
+                  <div className="card-actions">
+                    <button
+                      className="card-action-button"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleMultiSelect(image.id);
+                      }}
+                      title="Select"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      className="card-action-button"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (multiSelectIds.length > 0) {
+                          void removeSelectedImages();
+                        } else {
+                          void removeImageById(image.id);
+                        }
+                      }}
+                      title="Remove"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <span className="thumb">
+                    <img src={image.imageUrl} alt={image.originalName} />
+                  </span>
+                  <span className="image-meta">
+                    <strong>{image.originalName}</strong>
+                    <span>{image.width && image.height ? `${image.width} x ${image.height}` : "Dimensions unknown"}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -346,7 +454,7 @@ function App() {
                   className="icon-button"
                   type="submit"
                   title="Add tag"
-                  disabled={!tagInput.trim() || (selectedImage.tags.length >= 10)}
+                  disabled={isAddingTag || !tagInput.trim() || (selectedImage.tags.length >= 10)}
                 >
                   <ImagePlus size={17} />
                 </button>
@@ -388,13 +496,35 @@ function App() {
           <button className="preview-close" type="button" onClick={() => setPreview(null)} title="Close preview">
             <X size={22} />
           </button>
-          <button className="preview-nav prev" type="button" onClick={() => navigatePreview("previous")} title="Previous" disabled={filteredImages.findIndex(img => img.id === preview.id) <= 0}>
-            <ChevronLeft size={18} />
+          <button
+            className="preview-arrow preview-left"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigatePreview("previous");
+            }}
+            title="Previous"
+          >
+            <img src={leftArrowUrl} alt="Previous" />
           </button>
-          <button className="preview-nav next" type="button" onClick={() => navigatePreview("next")} title="Next" disabled={filteredImages.findIndex(img => img.id === preview.id) >= filteredImages.length - 1}>
-            <ChevronRight size={18} />
+
+          <button
+            className="preview-arrow preview-right"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigatePreview("next");
+            }}
+            title="Next"
+          >
+            <img src={rightArrowUrl} alt="Next" />
           </button>
-          <img src={preview.imageUrl} alt={preview.originalName} />
+          <img
+            src={preview.imageUrl}
+            alt={preview.originalName}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.stopPropagation()}
+          />
           <div className="preview-caption">{preview.originalName}</div>
         </div>
       )}

@@ -1,6 +1,6 @@
 {
   "name": "designvault",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "A local desktop image vault for designers.",
   "main": "dist/main/main.js",
